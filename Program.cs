@@ -1,25 +1,42 @@
 ﻿using System;
+using System.Text.RegularExpressions;
 
 namespace Dflat
 {
-    enum StatementType { 
+    public enum StatementType { 
         STATEMENT_INSERT,
         STATEMENT_SELECT
     }
-        enum MetaCommandResult
+    public enum MetaCommandResult
     {
         META_COMMAND_EXIT,
         META_COMMAND_SUCCESS,
         META_COMMAND_UNRECOGNIZED_COMMAND
     }
-    enum PrepareResult
+    public enum PrepareResult
     {
         PREPARE_SUCCESS,
-        PREPARE_UNRECOGNIZED_STATEMENT
+        PREPARE_UNRECOGNIZED_STATEMENT,
+        PREPARE_SYNTAX_ERROR
     }
-    class Statement
+
+    public class Row
+    {
+        public int id;
+        public string username;
+        public string email;
+    }
+
+    public class Statement
     {
         public StatementType type;
+        public Row rowToInsert; // only used by insert statement
+
+        public Statement()
+        {
+            this.rowToInsert = new Row();
+        }
+
         public void ExecuteStatement() 
         {
             switch (this.type)
@@ -33,7 +50,7 @@ namespace Dflat
             }
         }
     }
-    class Program
+    public class Program
     {
         static void PrintPrompt()
         {
@@ -41,7 +58,7 @@ namespace Dflat
         }
         
         
-        static MetaCommandResult DoMetaCommand(string line)
+        public static MetaCommandResult DoMetaCommand(string line)
         {
             if (line == ".exit")
             {
@@ -52,16 +69,35 @@ namespace Dflat
                 return MetaCommandResult.META_COMMAND_UNRECOGNIZED_COMMAND;
             }
         }
-        static PrepareResult PrepareStatement(string line, Statement statement)
+        public static PrepareResult PrepareStatement(string line, Statement statement)
         {
-            if (line.Substring(0,6) == "insert")
+            if (Regex.IsMatch(line, @"insert.*"))
             {
-                //statement->type = STATEMENT_INSERT;
+                statement.type = StatementType.STATEMENT_INSERT;
+
+                string insertPattern = @"insert\s(\d+)\s(\w+)\s([\w.@]+)";
+                Regex rx = new Regex(insertPattern, RegexOptions.Compiled | RegexOptions.IgnoreCase);
+                MatchCollection matches = rx.Matches(line);
+
+                // Syntax error if we couldn't insert correctly
+                if (matches.Count != 1)
+                {
+                    return PrepareResult.PREPARE_SYNTAX_ERROR;
+                }
+                else if (matches[0].Groups.Count != 4)
+                {
+                    return PrepareResult.PREPARE_SYNTAX_ERROR;
+                }
+
+                statement.rowToInsert.id = Int32.Parse(matches[0].Groups[1].Value);
+                statement.rowToInsert.username = matches[0].Groups[2].Value;
+                statement.rowToInsert.email = matches[0].Groups[3].Value;
+
                 return PrepareResult.PREPARE_SUCCESS;
             }
-            if (line.Substring(0, 6) == "select")
+            if (Regex.IsMatch(line, @"select.*"))
             {
-                //statement->type = STATEMENT_SELECT;
+                statement.type = StatementType.STATEMENT_SELECT;
                 return PrepareResult.PREPARE_SUCCESS;
             }
 
@@ -97,6 +133,9 @@ namespace Dflat
                         break;
                     case PrepareResult.PREPARE_UNRECOGNIZED_STATEMENT:
                         Console.WriteLine("Unrecognized keyword at start of: '{0}'.", line);
+                        continue;
+                    case PrepareResult.PREPARE_SYNTAX_ERROR:
+                        Console.WriteLine("Syntax error at start of: '{0}'.", line);
                         continue;
                 }
 
